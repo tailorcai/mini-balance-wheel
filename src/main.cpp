@@ -1,7 +1,8 @@
 #include <Arduino.h>
 
 #include <ESP32Encoder.h> // https://github.com/madhephaestus/ESP32Encoder.git 
-#include "mcpwm_motor.h"
+#include "mcpwm_motor.h"    // for 9910
+// #include <SparkFun_TB6612.h>  // for 6612
 #include "I2Cdev.h"
 #include "MPU6050_6Axis_MotionApps20.h"
 
@@ -35,6 +36,7 @@ void drawStr(int line, const char* name, int t) {
 }
 //END
 McpwmMotor  motorsCtrl;
+// Motor motorL()
 ESP32Encoder encoderL, encoderR;
 //BEGIN==========MPU6050==================================================
   bool dmpReady = false;  // set true if DMP init was successful
@@ -58,7 +60,7 @@ ESP32Encoder encoderL, encoderR;
   MPU6050 mpu;
 //END==========MPU6050==================================================
 
-#define INTERRUPT_PIN 4
+#define INTERRUPT_PIN 15
 #define LED_PIN       2
 int8_t PIN_ENCODER_L[] = {33,32};
 int8_t PIN_ENCODER_R[] = {35,34};
@@ -67,8 +69,8 @@ int8_t PIN_MOTOR_R[] = {27,26};
 
 //BEGIN-BUTTON
 #include <OneButton.h>
+#define BUTTON_PIN 21
 
-#define BUTTON_PIN 23
 OneButton btn = OneButton(
   BUTTON_PIN,  // Input pin for the button
   true,        // Button is active LOW
@@ -90,8 +92,11 @@ void handleClick() {
   Serial.println("Button clicked");
 }
 
+#define PIN_SDA     18        // ESP32 default 21 
+#define PIN_SCL     19        // ESP32 default 22
+
 void setup() {
-  Wire.begin();
+  Wire.begin(PIN_SDA, PIN_SCL);
   Wire.setClock(400000); // 400kHz I2C clock. Comment this line if having compilation difficulties
   Serial.begin(115200);
 
