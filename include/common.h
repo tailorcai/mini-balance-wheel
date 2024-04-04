@@ -6,3 +6,5 @@
 #define INTERRUPT_PIN 18
 
 const char * host_ip = "192.168.0.248";
+
+enum ERROR_TYPES { NO_ERROR, ERROR_PAUSE, ERROR_FLOP, ERROR_6050 };

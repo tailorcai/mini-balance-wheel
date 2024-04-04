@@ -58,10 +58,10 @@ public:
       // mpu.setRate(2);
       // Serial.println("rate:");Serial.println( mpu.getRate());
       // supply your own gyro offsets here, scaled for min sensitivity
-      mpu.setXGyroOffset(14);
-      mpu.setYGyroOffset(36);
-      mpu.setZGyroOffset(5);
-      mpu.setZAccelOffset(802); // 1688 factory default for my test chip
+      mpu.setXGyroOffset(12);
+      mpu.setYGyroOffset(25);
+      mpu.setZGyroOffset(23);
+      mpu.setZAccelOffset(726); // 1688 factory default for my test chip
 
       // make sure it worked (returns 0 if so)
       if (devStatus == 0) {

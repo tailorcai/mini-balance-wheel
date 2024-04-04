@@ -4,28 +4,19 @@
 #include "flex_log.h"
 #include <ESP32Encoder.h> // https://github.com/madhephaestus/ESP32Encoder.git 
 #include <TB6612_ESP32.h> // for 6612
+#include "motor_adj.h"
 
 TaskHandle_t th_p[1];
 
 Flex_Log& _logger = Flex_Log::instance();
 
-class MotorWithAdj : public Motor {
-  int ZeroOffset;
-  public:
-    MotorWithAdj(int In1pin, int In2pin, int PWMpin, int offset, int STBYpin, int freq, int resolution, int channel_pin, int zero_offset):
-      Motor(In1pin,In2pin,PWMpin,offset,STBYpin,freq,resolution,channel_pin ), ZeroOffset(zero_offset) {}
-    void drive(int speed) {
-      if( speed > 0 ) speed += ZeroOffset;
-      else if( speed < 0) speed -= ZeroOffset;
-      Motor::drive( speed );
-    }
-};
 
-MotorWithAdj motorL(13,14,15,1,2,5000,8,1, 0);
-MotorWithAdj motorR(26,27,5,1,2,5000,8,2, 5);
+MotorWithAdj motorL(33,25,32,1,5,5000,8,1, 0.1);
+MotorWithAdj motorR(27,26,14,1,5,5000,8,2, 0);
 ESP32Encoder encoderL, encoderR;
-int8_t PIN_ENCODER_L[] = {25,32};
-int8_t PIN_ENCODER_R[] = {35,34};
+
+int8_t PIN_ENCODER_L[] = {35,34};
+int8_t PIN_ENCODER_R[] = {12,13};
 
 int lspeed, rspeed;
 void cmdCallback(void*cmd) {
@@ -40,6 +31,7 @@ void cmdCallback(void*cmd) {
         Serial.println(" speed set fail!");
     }
 }
+
 void HostTask(void *args) {
     _logger.run( cmdCallback );
 }

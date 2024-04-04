@@ -11,6 +11,8 @@ Flex_Log& _logger = Flex_Log::instance();
 
 #include "mpu6050_dmp.h"
 #include "common.h"
+#include "motor_adj.h"
+#include "pid.h"
 
 #include <SPI.h>
 #include <Wire.h>
@@ -43,27 +45,25 @@ Flex_Log& _logger = Flex_Log::instance();
 //END
 // McpwmMotor  motorsCtrl;
 
-Motor motorL(13,14,15,1,2,5000,8,1,  0);
-Motor motorR(26,27,5,1,2,5000,8,2,  5);
+ // 管脚顺序要匹配PID
+MotorWithAdj motorL(33,25,32,1,5,5000,8,1, .02);
+MotorWithAdj motorR(27,26,14,1,5,5000,8,2, 0);
 ESP32Encoder encoderL, encoderR;
 
-
-
 #define LED_PIN       2
-int8_t PIN_ENCODER_L[] = {25,32};
-int8_t PIN_ENCODER_R[] = {35,34};
-// int8_t PIN_MOTOR_L[] = {13,14};  // #12 is special pin
-// int8_t PIN_MOTOR_R[] = {27,26};
+int8_t PIN_ENCODER_L[] = {35,34};
+int8_t PIN_ENCODER_R[] = {12,13};
 
-//BEGIN-BUTTON
-// #include <OneButton.h>
-// #define BUTTON_PIN 21
+// BEGIN-BUTTON
+#include <OneButton.h>
+#define BUTTON_PIN 4
 
-// OneButton btn = OneButton(
-//   BUTTON_PIN,  // Input pin for the button
-//   true,        // Button is active LOW
-//   true         // Enable internal pull-up resistor
-// );
+// 切换运行/暂停模式,或者由于倾斜角度过大，自动进入暂停模式
+OneButton pauseBtn = OneButton(
+  BUTTON_PIN,  // Input pin for the button
+  true,        // Button is active LOW
+  true         // Enable internal pull-up resistor
+);
 
 // ================================================================
 // ===               INTERRUPT DETECTION ROUTINE                ===
@@ -77,63 +77,18 @@ void dmpDataReady() {
 
 
 int MotorRun = 1;
-void handleClick() {
-  MotorRun = 1 - MotorRun;
-  Serial.println("Button clicked");
+ERROR_TYPES error_mode;
+void on_error(ERROR_TYPES mode) {
+  MotorRun = 0;
+  error_mode = mode;
 }
 
 TaskHandle_t th_p[1];
 
-void cmdCallback(void*cmd) {
-    Serial.print( "cmd: ");
-    Serial.println( (const char*) cmd );
-}
-void HostTask(void *args) {
-    _logger.run( cmdCallback );
-}
-
-
 MPU6050_Entity  entity_MPU6050;
+V_PID v_pid(20,20/200);
+B_PID b_pid(300,3.0,0.5);
 
-void setup() {
-  Wire.begin(PIN_SDA, PIN_SCL);
-  Wire.setClock(400000); // 400kHz I2C clock. Comment this line if having compilation difficulties
-  Serial.begin(115200);
-
-  WiFi.begin("LINJIA","050208linjia");
-  
-  while( WiFi.status() != WL_CONNECTED) {
-    Serial.println("WiFi begin ..");
-    delay(200);
-  }
-
-  if( _logger.begin( host_ip )) {
-    xTaskCreatePinnedToCore(HostTask, "HostTask", 4096, NULL, 3, &th_p[0], 0); 
-  }
-  // btn.attachClick(handleClick);
-  // pinMode( BUTTON_PIN, INPUT_PULLUP);
-
-  // setup_display();
-
-  encoderL.attachFullQuad( PIN_ENCODER_L[0], PIN_ENCODER_L[1]);
-  encoderL.setCount(0);
-
-  encoderR.attachFullQuad( PIN_ENCODER_R[0], PIN_ENCODER_R[1]);
-  encoderR.setCount(0);
-
-  // motorsCtrl.attachMotor(0, PIN_MOTOR_L[0], PIN_MOTOR_L[1]);
-  // motorsCtrl.attachMotor(1, PIN_MOTOR_R[0], PIN_MOTOR_R[1]);
-
-  pinMode(INTERRUPT_PIN, INPUT);
-  entity_MPU6050.initialize( INTERRUPT_PIN , dmpDataReady );
-  // motorsCtrl.updateMotorSpeed( 0, 0 );
-  // motorsCtrl.updateMotorSpeed( 1, 0 );
-
-
-
-    // configure LED for output
-    pinMode(LED_PIN, OUTPUT);
-}
 
 int Balance_Pwm,Velocity_Pwm,Turn_Pwm;
 uint8_t Flag_Target,yanshi_count,yanshi_flag;
@@ -157,15 +112,15 @@ int encoder_read( ESP32Encoder& encoder ) {
 返回  值：直立控制PWM
 作    者：平衡小车之家
 **************************************************************************/
-#define ZHONGZHI -1
-int balance_vertical(float Angle,float Gyro)
-{  
-   float Bias,kp=100,kd=0.4;    // 100,0.4
-	 int balance;
-	 Bias=Angle-ZHONGZHI;       //===求出平衡的角度中值 和机械相关
-	 balance=kp*Bias+Gyro*kd;   //===计算平衡控制的电机PWM  PD控制   kp是P系数 kd是D系数 
-	 return balance;
-}
+// #define ZHONGZHI 0
+// int balance_vertical(float Angle,float Gyro)
+// {  
+//    float Bias;//,kp=100,kd=0.4;    // 100,0.4
+// 	 int balance;
+// 	 Bias=Angle-ZHONGZHI;       //===求出平衡的角度中值 和机械相关
+// 	 balance=b_pid.kp*Bias+Gyro*balance_kd;   //===计算平衡控制的电机PWM  PD控制   kp是P系数 kd是D系数 
+// 	 return balance;
+// }
 
 /**************************************************************************
 函数功能：速度PI控制 修改前进后退速度，请修Target_Velocity，比如，改成60就比较慢了
@@ -173,24 +128,24 @@ int balance_vertical(float Angle,float Gyro)
 返回  值：速度控制PWM
 作    者：平衡小车之家
 **************************************************************************/
-int velocity(int encoder_left,int encoder_right)
-{  
-    static float Velocity,Encoder_Least,Encoder,Movement;
-	  static float Encoder_Integral=0;
-	  float kp=50,ki=kp/200;
-	  //=============速度PI控制器=======================//	
-		Encoder_Least =(Encoder_Value_Left+Encoder_Value_Right)-0;                    //===获取最新速度偏差==测量速度（左右编码器之和）-目标速度（此处为零） 
-		Encoder *= 0.7;		                                                //===一阶低通滤波器       
-		Encoder += Encoder_Least*0.3;	                                    //===一阶低通滤波器    
-    // #if 0
-		Encoder_Integral +=Encoder;                                       //===积分出位移 积分时间：10ms
-		Encoder_Integral=Encoder_Integral-Movement;                       //===接收遥控器数据，控制前进后退
-		if(Encoder_Integral>15000)  	Encoder_Integral=15000;             //===积分限幅
-		if(Encoder_Integral<-15000) 	Encoder_Integral=-15000;            //===积分限幅	
-    // #endif
-		Velocity=Encoder*kp+Encoder_Integral*ki;                          //===速度控制	
-		return Velocity;
-}
+// int V_PID::velocity(int encoder_left,int encoder_right)
+// {  
+//     static float Velocity,Encoder_Least,Encoder,Movement;
+// 	  static float Encoder_Integral=0;
+// 	  // float kp=50,ki=kp/200;
+// 	  //=============速度PI控制器=======================//	
+// 		Encoder_Least =(Encoder_Value_Left+Encoder_Value_Right)-0;                    //===获取最新速度偏差==测量速度（左右编码器之和）-目标速度（此处为零） 
+// 		Encoder *= 0.7;		                                                //===一阶低通滤波器       
+// 		Encoder += Encoder_Least*0.3;	                                    //===一阶低通滤波器    
+//     // #if 0
+// 		Encoder_Integral +=Encoder;                                       //===积分出位移 积分时间：10ms
+// 		Encoder_Integral=Encoder_Integral-Movement;                       //===接收遥控器数据，控制前进后退
+// 		if(Encoder_Integral>15000)  	Encoder_Integral=15000;             //===积分限幅
+// 		if(Encoder_Integral<-15000) 	Encoder_Integral=-15000;            //===积分限幅	
+//     // #endif
+// 		Velocity=Encoder*kp+Encoder_Integral*ki;                          //===速度控制	
+// 		return Velocity;
+// }
 /**************************************************************************
 函数功能：赋值给PWM寄存器
 入口参数：左轮PWM、右轮PWM
@@ -250,18 +205,8 @@ int Xianfu_Pwm(int pwm)
 float fRound(float x) {
   return round(x * 100)/100.0;
 }
-void rpt_proc() {
-  static float angle, gyro;
-  if( angle == fRound(entity_MPU6050.Angle_Balance) && gyro == fRound(entity_MPU6050.Gyro_Balance)) 
-    return;
-  char buf[200];
-  sprintf(buf, "chs: %4.2f,%4.2f,%d\n",entity_MPU6050.Angle_Balance,entity_MPU6050.Gyro_Balance,Balance_Pwm);
-  _logger.log(buf);
-  angle = fRound(entity_MPU6050.Angle_Balance);
-  gyro = fRound(entity_MPU6050.Gyro_Balance);
-}
 
-void balance_main() {
+ERROR_TYPES balance_main() {
   static bool do_it = false;
   entity_MPU6050.get_Angle();
   // do_it = !do_it;
@@ -270,26 +215,27 @@ void balance_main() {
   // }
   
   // reader encoder
-  Encoder_Value_Left = -encoder_read( encoderL );
+  Encoder_Value_Left = encoder_read( encoderL );
   Encoder_Value_Right = encoder_read( encoderR );
 
   // Serial.println("Encoders");
   // Serial.print( Encoder_Value_Left );Serial.print( '\t' );Serial.println( Encoder_Value_Right );
 
-  Balance_Pwm =balance_vertical(entity_MPU6050.Angle_Balance, entity_MPU6050.Gyro_Balance);                   //===平衡PID控制	
-		  Velocity_Pwm=0;// velocity(Encoder_Value_Left,Encoder_Value_Right);                  //===速度环PID控制	 记住，速度反馈是正反馈，就是小车快的时候要慢下来就需要再跑快一点
+  Balance_Pwm =b_pid.vertical(entity_MPU6050.Angle_Balance, entity_MPU6050.Gyro_Balance);                   //===平衡PID控制	
+		  Velocity_Pwm= v_pid.velocity(Encoder_Value_Left,Encoder_Value_Right);                  //===速度环PID控制	 记住，速度反馈是正反馈，就是小车快的时候要慢下来就需要再跑快一点
  	    Moto1_PWM=Balance_Pwm+Velocity_Pwm;                                     //===计算左轮电机最终PWM
  	  	Moto2_PWM=Balance_Pwm+Velocity_Pwm;                                     //===计算右轮电机最终PWM
    		Moto1_PWM = Xianfu_Pwm(Moto1_PWM);                                                       //===PWM限幅
       Moto2_PWM = Xianfu_Pwm(Moto2_PWM);
-      if(Turn_Off(entity_MPU6050.Angle_Balance)==0)                                      //===如果不存在异常
- 			  Set_Pwm(Moto1_PWM,Moto2_PWM);                                               //===赋值给PWM寄存器  
-      else {
-        motorR.brake();
-        motorL.brake();
-      }
+  if(Turn_Off(entity_MPU6050.Angle_Balance)==0) {                                     //===如果不存在异常
+      Set_Pwm(Moto1_PWM,Moto2_PWM);       
+      return NO_ERROR;
+      }                                        //===赋值给PWM寄存器  
+  else {
+      // on_error( ERROR_FLOP );
+      return ERROR_FLOP;
+  }
 
-  rpt_proc();
 }
 
 // void oled_display() {
@@ -313,33 +259,171 @@ void balance_main() {
 //   display.display();
 // }
 
+void handlePauseClick() {
+  MotorRun = 1 - MotorRun;
+  if( !MotorRun )
+    error_mode = ERROR_PAUSE;
+  else {
+    error_mode = NO_ERROR;
+    v_pid.reset();
+    b_pid.reset();
+    // 需要清除编码器历史数据
+    encoderL.clearCount();
+    encoderR.clearCount();
+  }
+  Serial.println("PauseButton clicked");
+}
+
+void monitor_report() {
+  static float angle, gyro;
+  if( angle == fRound(entity_MPU6050.Angle_Balance) && gyro == fRound(entity_MPU6050.Gyro_Balance)) 
+    return;
+  char buf[200];
+  sprintf(buf, "chs: %4.2f,%4.2f,%d,%d,%d,%d\n",entity_MPU6050.Angle_Balance,entity_MPU6050.Gyro_Balance,Encoder_Value_Left, Encoder_Value_Right, Balance_Pwm, Velocity_Pwm);
+  _logger.log(buf);
+  angle = fRound(entity_MPU6050.Angle_Balance);
+  gyro = fRound(entity_MPU6050.Gyro_Balance);
+}
+
 void loop() {
-  // btn.tick();
   static int _cnt = 0;
-  _cnt = (_cnt+1) % 10 ;
+  _cnt ++;
+
+  pauseBtn.tick();
+
+  if( !MotorRun ) {
+    motorR.brake();
+    motorL.brake();
+
+    digitalWrite( LED_PIN, !digitalRead(LED_PIN));
+    delay(200);
+    return;
+  } else {
+    digitalWrite( LED_PIN, 0 );
+  }
 
   // if programming failed, don't try to do anything
-    if (!entity_MPU6050.dmpReady) return;
-    if ( !mpuInterrupt) return;
+  if (!entity_MPU6050.dmpReady) {
+    on_error( ERROR_6050 );
+  };
+  
+  if ( mpuInterrupt ) {
     mpuInterrupt = false;
-    // Serial.println( mpuIntTimestamp );
-
-  // put your main code here, to run repeatedly:
-  // u_long t = micros();
-  balance_main();
-  // u_long dt = micros() - t;
-  // Serial.print("balance_main cost:");
-  // Serial.println( dt );
-
-  Serial.print(".");
-  if( _cnt == 1) {
-    Serial.println(".");
-
-    // u_long t = micros();
-    // oled_display();
-    // u_long dt = micros() - t;
-    // Serial.print("oled_display cost:");
-    // Serial.println( dt );
+    ERROR_TYPES err;
+    if( (err = balance_main()) == NO_ERROR ) 
+      monitor_report();
+    else 
+      on_error( err );
+  }
+  else {
+    delay(1);
   }
 }
 
+const char * cmds_table[] = { "bpid", "vpid", "spd" };
+
+boolean cmd_pid(const char* scmd) {
+  float a1, a2, a3;
+  if( 3 == sscanf(scmd, "%f,%f,%f", &a1,&a2, &a3)) {
+    // Serial.print( "brk:2 ");
+    b_pid.kp = a1;
+    b_pid.kd = a2;
+    b_pid.ZHONGZHI = a3;
+    _logger.log( "balance PID param changed:" + String( a1 ) + "," + String(a2) + "," + String(a3));
+    return true;
+  }
+  return false;
+}
+boolean cmd_vid(const char* scmd) {
+  float b1, b2;
+  if( 2 == sscanf(scmd, "%f,%f", &b1,&b2)) {
+    // Serial.print( "brk:2 ");
+    v_pid.kp = b1;
+    v_pid.ki = b2;
+    _logger.log( "velocity PID param changed" + String( b1 ) + "," + String(b2));
+    return true;
+  }
+  return false;
+}
+
+boolean cmd_speed(const char* scmd) {
+  float v;
+  if( 1 == sscanf(scmd, "%f", &v)) {
+    v_pid.Speed = v;
+    _logger.log( "velocity PID param changed" + String( v ) );
+    return true;
+  }
+  return false;
+}
+void cmdCallback(void*cmd) {
+  Serial.print( "cmd: ");
+  Serial.println( (const char*) cmd );
+
+  const char * scmd = (const char*)cmd;
+  int nCmd = -1;
+  for( int i=0;i<sizeof(cmds_table) / sizeof( const char*);i++) {
+    if( strncmp( scmd , cmds_table[i],strlen(cmds_table[i])) == 0 ) {
+      nCmd = i;
+      scmd = scmd+strlen(cmds_table[i]);
+      break;
+    }
+  }
+  bool r = false;
+  switch(nCmd) {
+    case 0:
+      r = cmd_pid(scmd);
+      break;
+    case 1:
+      r = cmd_vid(scmd);
+      break;
+    case 2:
+      r = cmd_speed(scmd);
+      break;
+  }
+  if( !r ) {
+    Serial.println( "Command error occurs");
+  }
+}
+void HostTask(void *args) {
+    _logger.run( cmdCallback );
+}
+
+void setup() {
+  Wire.begin(PIN_SDA, PIN_SCL);
+  Wire.setClock(400000); // 400kHz I2C clock. Comment this line if having compilation difficulties
+  Serial.begin(115200);
+
+  WiFi.begin("LINJIA","050208linjia");
+  
+  while( WiFi.status() != WL_CONNECTED) {
+    Serial.println("WiFi begin ..");
+    delay(200);
+  }
+
+  if( _logger.begin( host_ip )) {
+    xTaskCreatePinnedToCore(HostTask, "HostTask", 4096, NULL, 3, &th_p[0], 0); 
+  }
+
+  pauseBtn.attachClick(handlePauseClick);
+  pinMode( BUTTON_PIN, INPUT_PULLUP); // no need ? as the button class has done this?
+
+  // setup_display();
+
+  encoderL.attachFullQuad( PIN_ENCODER_L[0], PIN_ENCODER_L[1]);
+  encoderL.setCount(0);
+
+  encoderR.attachFullQuad( PIN_ENCODER_R[0], PIN_ENCODER_R[1]);
+  encoderR.setCount(0);
+
+  // motorsCtrl.attachMotor(0, PIN_MOTOR_L[0], PIN_MOTOR_L[1]);
+  // motorsCtrl.attachMotor(1, PIN_MOTOR_R[0], PIN_MOTOR_R[1]);
+
+  pinMode(INTERRUPT_PIN, INPUT);
+  entity_MPU6050.initialize( INTERRUPT_PIN , dmpDataReady );
+  // motorsCtrl.updateMotorSpeed( 0, 0 );
+  // motorsCtrl.updateMotorSpeed( 1, 0 );
+
+    // configure LED for output
+  pinMode(LED_PIN, OUTPUT);
+  on_error( ERROR_PAUSE );
+}
