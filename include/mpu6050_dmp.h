@@ -31,6 +31,7 @@ public:
   // packet structure for InvenSense teapot demo
   MPU6050 mpu;
   float Angle_Balance,Gyro_Balance;           //平衡倾角 平衡陀螺仪 转向陀螺仪
+  float Gyro_Turn;
 //END==========MPU6050==================================================    
     MPU6050_Entity():dmpReady(false) {
 
@@ -121,6 +122,7 @@ public:
             VectorInt16 gyro;
             mpu.dmpGetGyro(&gyro, fifoBuffer);
             Gyro_Balance = -gyro.y;
+            Gyro_Turn = gyro.z;
 
             // Serial.print( Angle_Balance );
             // Serial.print( "\t" );

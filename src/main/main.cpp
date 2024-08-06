@@ -46,7 +46,7 @@ Flex_Log& _logger = Flex_Log::instance();
 // McpwmMotor  motorsCtrl;
 
  // 管脚顺序要匹配PID
-MotorWithAdj motorL(33,25,32,1,5,5000,8,1, .02);
+MotorWithAdj motorL(33,25,32,1,5,5000,8,1, .04);
 MotorWithAdj motorR(27,26,14,1,5,5000,8,2, 0);
 ESP32Encoder encoderL, encoderR;
 
@@ -86,8 +86,9 @@ void on_error(ERROR_TYPES mode) {
 TaskHandle_t th_p[1];
 
 MPU6050_Entity  entity_MPU6050;
-V_PID v_pid(20,20/200);
-B_PID b_pid(300,3.0,0.5);
+V_PID v_pid(30,30.0/200);
+B_PID b_pid(180,4.0,0.0);
+Turn_PID turn_pid(0,0);
 
 
 int Balance_Pwm,Velocity_Pwm,Turn_Pwm;
@@ -223,8 +224,9 @@ ERROR_TYPES balance_main() {
 
   Balance_Pwm =b_pid.vertical(entity_MPU6050.Angle_Balance, entity_MPU6050.Gyro_Balance);                   //===平衡PID控制	
 		  Velocity_Pwm= v_pid.velocity(Encoder_Value_Left,Encoder_Value_Right);                  //===速度环PID控制	 记住，速度反馈是正反馈，就是小车快的时候要慢下来就需要再跑快一点
- 	    Moto1_PWM=Balance_Pwm+Velocity_Pwm;                                     //===计算左轮电机最终PWM
- 	  	Moto2_PWM=Balance_Pwm+Velocity_Pwm;                                     //===计算右轮电机最终PWM
+      Turn_Pwm    = 0; //turn_pid.turn(Encoder_Value_Left,Encoder_Value_Right, entity_MPU6050.Gyro_Turn);
+ 	    Moto1_PWM=Balance_Pwm+Velocity_Pwm - Turn_Pwm;                                     //===计算左轮电机最终PWM
+ 	  	Moto2_PWM=Balance_Pwm+Velocity_Pwm + Turn_Pwm;                                     //===计算右轮电机最终PWM
    		Moto1_PWM = Xianfu_Pwm(Moto1_PWM);                                                       //===PWM限幅
       Moto2_PWM = Xianfu_Pwm(Moto2_PWM);
   if(Turn_Off(entity_MPU6050.Angle_Balance)==0) {                                     //===如果不存在异常
@@ -275,14 +277,14 @@ void handlePauseClick() {
 }
 
 void monitor_report() {
-  static float angle, gyro;
-  if( angle == fRound(entity_MPU6050.Angle_Balance) && gyro == fRound(entity_MPU6050.Gyro_Balance)) 
-    return;
+  // static float angle, gyro;
+  // if( angle == fRound(entity_MPU6050.Angle_Balance) && gyro == fRound(entity_MPU6050.Gyro_Balance)) 
+  //   return;
   char buf[200];
-  sprintf(buf, "chs: %4.2f,%4.2f,%d,%d,%d,%d\n",entity_MPU6050.Angle_Balance,entity_MPU6050.Gyro_Balance,Encoder_Value_Left, Encoder_Value_Right, Balance_Pwm, Velocity_Pwm);
+  sprintf(buf, "chs: %4.2f,%4.2f,%d,%d,%d,%d,%d\n",entity_MPU6050.Angle_Balance,entity_MPU6050.Gyro_Balance,Encoder_Value_Left, Encoder_Value_Right, Balance_Pwm, Velocity_Pwm,Turn_Pwm);
   _logger.log(buf);
-  angle = fRound(entity_MPU6050.Angle_Balance);
-  gyro = fRound(entity_MPU6050.Gyro_Balance);
+  // angle = fRound(entity_MPU6050.Angle_Balance);
+  // gyro = fRound(entity_MPU6050.Gyro_Balance);
 }
 
 void loop() {
@@ -320,69 +322,98 @@ void loop() {
   }
 }
 
-const char * cmds_table[] = { "bpid", "vpid", "spd" };
+struct CMD_MAP{
+  const char* name;
+  Configurable* obj;
+};
+CMD_MAP cmds_table[] = { { "bpid", &b_pid },
+                         { "vpid", &v_pid}, 
+                         { "tpid", &turn_pid} };
 
-boolean cmd_pid(const char* scmd) {
-  float a1, a2, a3;
-  if( 3 == sscanf(scmd, "%f,%f,%f", &a1,&a2, &a3)) {
-    // Serial.print( "brk:2 ");
-    b_pid.kp = a1;
-    b_pid.kd = a2;
-    b_pid.ZHONGZHI = a3;
-    _logger.log( "balance PID param changed:" + String( a1 ) + "," + String(a2) + "," + String(a3));
-    return true;
-  }
-  return false;
-}
-boolean cmd_vid(const char* scmd) {
-  float b1, b2;
-  if( 2 == sscanf(scmd, "%f,%f", &b1,&b2)) {
-    // Serial.print( "brk:2 ");
-    v_pid.kp = b1;
-    v_pid.ki = b2;
-    _logger.log( "velocity PID param changed" + String( b1 ) + "," + String(b2));
-    return true;
-  }
-  return false;
-}
+// boolean cmd_pid(const char* scmd) {
+//   float a1, a2, a3;
+//   if( 3 == sscanf(scmd, "%f,%f,%f", &a1,&a2, &a3)) {
+//     // Serial.print( "brk:2 ");
+//     b_pid.kp = a1;
+//     b_pid.kd = a2;
+//     b_pid.ZHONGZHI = a3;
+//     _logger.log( "balance PID param changed:" + String( a1 ) + "," + String(a2) + "," + String(a3));
+//     return true;
+//   }
+//   return false;
+// }
+// boolean cmd_vid(const char* scmd) {
+//   float b1, b2;
+//   if( 2 == sscanf(scmd, "%f,%f", &b1,&b2)) {
+//     // Serial.print( "brk:2 ");
+//     v_pid.kp = b1;
+//     v_pid.ki = b2;
+//     _logger.log( "velocity PID param changed" + String( b1 ) + "," + String(b2));
+//     return true;
+//   }
+//   return false;
+// }
 
-boolean cmd_speed(const char* scmd) {
-  float v;
-  if( 1 == sscanf(scmd, "%f", &v)) {
-    v_pid.Speed = v;
-    _logger.log( "velocity PID param changed" + String( v ) );
-    return true;
-  }
-  return false;
-}
+// boolean cmd_speed(const char* scmd) {
+//   float v;
+//   if( 1 == sscanf(scmd, "%f", &v)) {
+//     v_pid.Movement = v;
+//     _logger.log( "velocity PID param changed" + String( v ) );
+//     return true;
+//   }
+//   return false;
+// }
+
+// boolean cmd_turn(const char* scmd) {
+//   int v = 0;
+//   if( 1 == sscanf(scmd, "%d", &v) && abs(v)<=1 ) {
+//     turn_pid.TurnMode = v;
+//     _logger.log( "turn PID param changed" + String( v ) );
+//     return true;
+//   }
+//   return false;
+// }
 void cmdCallback(void*cmd) {
-  Serial.print( "cmd: ");
-  Serial.println( (const char*) cmd );
+  // Serial.print( "cmd: ");
+  // Serial.println( (const char*) cmd );
 
   const char * scmd = (const char*)cmd;
   int nCmd = -1;
-  for( int i=0;i<sizeof(cmds_table) / sizeof( const char*);i++) {
-    if( strncmp( scmd , cmds_table[i],strlen(cmds_table[i])) == 0 ) {
+  for( int i=0;i<sizeof(cmds_table) / sizeof(CMD_MAP);i++) {
+    const char* name = cmds_table[i].name;
+    int len = strlen(name);
+    if( strncmp( scmd , name,len) == 0 ) {
       nCmd = i;
-      scmd = scmd+strlen(cmds_table[i]);
-      break;
+      scmd += len + 1;
+      bool r = cmds_table[i].obj->set_config( scmd );
+      if( !r ) {
+        _logger.debug( "Command error occurs");
+      }
+      else {
+        _logger.debug( "Command success");
+      }
+      _logger.debug( cmds_table[i].obj->get_config() );
+      return;
     }
   }
-  bool r = false;
-  switch(nCmd) {
-    case 0:
-      r = cmd_pid(scmd);
-      break;
-    case 1:
-      r = cmd_vid(scmd);
-      break;
-    case 2:
-      r = cmd_speed(scmd);
-      break;
-  }
-  if( !r ) {
-    Serial.println( "Command error occurs");
-  }
+
+  _logger.debug("command invalid");
+  // bool r = false;
+  // switch(nCmd) {
+  //   case 0:
+  //     r = cmd_pid(scmd);
+  //     break;
+  //   case 1:
+  //     r = cmd_vid(scmd);
+  //     break;
+  //   case 2:
+  //     r = cmd_speed(scmd);
+  //     break;
+  //   case 3:
+  //     r = cmd_turn(scmd);
+  //     break;
+  // }
+
 }
 void HostTask(void *args) {
     _logger.run( cmdCallback );
@@ -407,6 +438,7 @@ void setup() {
   pauseBtn.attachClick(handlePauseClick);
   pinMode( BUTTON_PIN, INPUT_PULLUP); // no need ? as the button class has done this?
 
+  _logger.debug("clear encoder");
   // setup_display();
 
   encoderL.attachFullQuad( PIN_ENCODER_L[0], PIN_ENCODER_L[1]);
@@ -419,6 +451,7 @@ void setup() {
   // motorsCtrl.attachMotor(1, PIN_MOTOR_R[0], PIN_MOTOR_R[1]);
 
   pinMode(INTERRUPT_PIN, INPUT);
+  _logger.debug("init MPU6050");
   entity_MPU6050.initialize( INTERRUPT_PIN , dmpDataReady );
   // motorsCtrl.updateMotorSpeed( 0, 0 );
   // motorsCtrl.updateMotorSpeed( 1, 0 );

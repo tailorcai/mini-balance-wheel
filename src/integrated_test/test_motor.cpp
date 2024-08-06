@@ -11,7 +11,7 @@ TaskHandle_t th_p[1];
 Flex_Log& _logger = Flex_Log::instance();
 
 
-MotorWithAdj motorL(33,25,32,1,5,5000,8,1, 0.1);
+MotorWithAdj motorL(33,25,32,1,5,5000,8,1, 0.04);
 MotorWithAdj motorR(27,26,14,1,5,5000,8,2, 0);
 ESP32Encoder encoderL, encoderR;
 
@@ -70,4 +70,6 @@ void setup() {
   encoderR.attachFullQuad( PIN_ENCODER_R[0], PIN_ENCODER_R[1]);
   encoderR.setCount(0);
 
+        // motorL.drive( lspeed );
+        // motorR.drive( rspeed );
 }
