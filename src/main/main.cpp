@@ -16,34 +16,7 @@ Flex_Log& _logger = Flex_Log::instance();
 
 #include <SPI.h>
 #include <Wire.h>
-// #include <Adafruit_GFX.h>
-// #include <Adafruit_SSD1306.h>
-// //BEGIN DISPLAY==================
-// #define SCREEN_WIDTH 128 // OLED display width, in pixels
-// #define SCREEN_HEIGHT 64 // OLED display height, in pixels
-// // Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
-// #define OLED_RESET     -1 // Reset pin # (or -1 if sharing Arduino reset pin)
-// Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
-// void setup_display() {
-//   if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { 
-//     Serial.println(F("SSD1306 allocation failed"));
-//     for(;;); // Don't proceed, loop forever
-//   }
-// }
-
-// void drawStr(int line, const char* name, int t) {
-//   char buf[100];
-
-//   display.setCursor(0, line*10);
-//   display.write( name );
-//   display.setCursor(50,line*10);
-//   if (t) display.write( t>0?"+":"-" );
-//   display.setCursor(70,line*10);
-//   display.write( itoa(t,buf,10) );
-// }
-//END
-// McpwmMotor  motorsCtrl;
 
  // 管脚顺序要匹配PID
 MotorWithAdj motorL(33,25,32,1,5,5000,8,1, .04);
@@ -107,46 +80,7 @@ int encoder_read( ESP32Encoder& encoder ) {
   return n;
 }
 
-/**************************************************************************
-函数功能：直立PD控制
-入口参数：角度、角速度
-返回  值：直立控制PWM
-作    者：平衡小车之家
-**************************************************************************/
-// #define ZHONGZHI 0
-// int balance_vertical(float Angle,float Gyro)
-// {  
-//    float Bias;//,kp=100,kd=0.4;    // 100,0.4
-// 	 int balance;
-// 	 Bias=Angle-ZHONGZHI;       //===求出平衡的角度中值 和机械相关
-// 	 balance=b_pid.kp*Bias+Gyro*balance_kd;   //===计算平衡控制的电机PWM  PD控制   kp是P系数 kd是D系数 
-// 	 return balance;
-// }
 
-/**************************************************************************
-函数功能：速度PI控制 修改前进后退速度，请修Target_Velocity，比如，改成60就比较慢了
-入口参数：左轮编码器、右轮编码器
-返回  值：速度控制PWM
-作    者：平衡小车之家
-**************************************************************************/
-// int V_PID::velocity(int encoder_left,int encoder_right)
-// {  
-//     static float Velocity,Encoder_Least,Encoder,Movement;
-// 	  static float Encoder_Integral=0;
-// 	  // float kp=50,ki=kp/200;
-// 	  //=============速度PI控制器=======================//	
-// 		Encoder_Least =(Encoder_Value_Left+Encoder_Value_Right)-0;                    //===获取最新速度偏差==测量速度（左右编码器之和）-目标速度（此处为零） 
-// 		Encoder *= 0.7;		                                                //===一阶低通滤波器       
-// 		Encoder += Encoder_Least*0.3;	                                    //===一阶低通滤波器    
-//     // #if 0
-// 		Encoder_Integral +=Encoder;                                       //===积分出位移 积分时间：10ms
-// 		Encoder_Integral=Encoder_Integral-Movement;                       //===接收遥控器数据，控制前进后退
-// 		if(Encoder_Integral>15000)  	Encoder_Integral=15000;             //===积分限幅
-// 		if(Encoder_Integral<-15000) 	Encoder_Integral=-15000;            //===积分限幅	
-//     // #endif
-// 		Velocity=Encoder*kp+Encoder_Integral*ki;                          //===速度控制	
-// 		return Velocity;
-// }
 /**************************************************************************
 函数功能：赋值给PWM寄存器
 入口参数：左轮PWM、右轮PWM
@@ -240,27 +174,6 @@ ERROR_TYPES balance_main() {
 
 }
 
-// void oled_display() {
-//   display.clearDisplay();
-//   display.setTextSize(1);      // Normal 1:1 pixel scale
-//   display.setTextColor(WHITE); // Draw white text
-//   display.setCursor(0, 0);     // Start at top-left corner
-//   display.cp437(true);  
-
-//   display.setCursor(20,0);
-//   display.write("Balanced Wheel");
- 
-//   display.setTextColor(WHITE); // Draw white text
-
-//   drawStr(1, "Left_V:", Encoder_Value_Left); 		
-//   drawStr(2, "Right_V:", Encoder_Value_Right); 		
-//   drawStr(3, "PWM      :", Moto1_PWM); 	
-//   drawStr(4, "B_PWM      :", Balance_Pwm); 	
-//   drawStr(5, "Angle_B:", Angle_Balance);
-//   drawStr(6, "Gyro_B:", Gyro_Balance);
-//   display.display();
-// }
-
 void handlePauseClick() {
   MotorRun = 1 - MotorRun;
   if( !MotorRun )
@@ -330,49 +243,6 @@ CMD_MAP cmds_table[] = { { "bpid", &b_pid },
                          { "vpid", &v_pid}, 
                          { "tpid", &turn_pid} };
 
-// boolean cmd_pid(const char* scmd) {
-//   float a1, a2, a3;
-//   if( 3 == sscanf(scmd, "%f,%f,%f", &a1,&a2, &a3)) {
-//     // Serial.print( "brk:2 ");
-//     b_pid.kp = a1;
-//     b_pid.kd = a2;
-//     b_pid.ZHONGZHI = a3;
-//     _logger.log( "balance PID param changed:" + String( a1 ) + "," + String(a2) + "," + String(a3));
-//     return true;
-//   }
-//   return false;
-// }
-// boolean cmd_vid(const char* scmd) {
-//   float b1, b2;
-//   if( 2 == sscanf(scmd, "%f,%f", &b1,&b2)) {
-//     // Serial.print( "brk:2 ");
-//     v_pid.kp = b1;
-//     v_pid.ki = b2;
-//     _logger.log( "velocity PID param changed" + String( b1 ) + "," + String(b2));
-//     return true;
-//   }
-//   return false;
-// }
-
-// boolean cmd_speed(const char* scmd) {
-//   float v;
-//   if( 1 == sscanf(scmd, "%f", &v)) {
-//     v_pid.Movement = v;
-//     _logger.log( "velocity PID param changed" + String( v ) );
-//     return true;
-//   }
-//   return false;
-// }
-
-// boolean cmd_turn(const char* scmd) {
-//   int v = 0;
-//   if( 1 == sscanf(scmd, "%d", &v) && abs(v)<=1 ) {
-//     turn_pid.TurnMode = v;
-//     _logger.log( "turn PID param changed" + String( v ) );
-//     return true;
-//   }
-//   return false;
-// }
 void cmdCallback(void*cmd) {
   // Serial.print( "cmd: ");
   // Serial.println( (const char*) cmd );
@@ -398,21 +268,6 @@ void cmdCallback(void*cmd) {
   }
 
   _logger.debug("command invalid");
-  // bool r = false;
-  // switch(nCmd) {
-  //   case 0:
-  //     r = cmd_pid(scmd);
-  //     break;
-  //   case 1:
-  //     r = cmd_vid(scmd);
-  //     break;
-  //   case 2:
-  //     r = cmd_speed(scmd);
-  //     break;
-  //   case 3:
-  //     r = cmd_turn(scmd);
-  //     break;
-  // }
 
 }
 void HostTask(void *args) {
@@ -447,14 +302,9 @@ void setup() {
   encoderR.attachFullQuad( PIN_ENCODER_R[0], PIN_ENCODER_R[1]);
   encoderR.setCount(0);
 
-  // motorsCtrl.attachMotor(0, PIN_MOTOR_L[0], PIN_MOTOR_L[1]);
-  // motorsCtrl.attachMotor(1, PIN_MOTOR_R[0], PIN_MOTOR_R[1]);
-
   pinMode(INTERRUPT_PIN, INPUT);
   _logger.debug("init MPU6050");
   entity_MPU6050.initialize( INTERRUPT_PIN , dmpDataReady );
-  // motorsCtrl.updateMotorSpeed( 0, 0 );
-  // motorsCtrl.updateMotorSpeed( 1, 0 );
 
     // configure LED for output
   pinMode(LED_PIN, OUTPUT);
