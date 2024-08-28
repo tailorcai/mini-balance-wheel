@@ -3,7 +3,7 @@
 #include "common.h"
 #include "flex_log.h"
 #include <ESP32Encoder.h> // https://github.com/madhephaestus/ESP32Encoder.git 
-#include <TB6612_ESP32.h> // for 6612
+#include "at8236_esp32.h" 
 #include "motor_adj.h"
 
 TaskHandle_t th_p[1];
@@ -11,12 +11,12 @@ TaskHandle_t th_p[1];
 Flex_Log& _logger = Flex_Log::instance();
 
 
-MotorWithAdj motorL(33,25,32,1,5,5000,8,1, 0.04);
-MotorWithAdj motorR(27,26,14,1,5,5000,8,2, 0);
+MotorWithAdj motorL(19,21,1,5000,8,1, 0);
+MotorWithAdj motorR(23,22,1,5000,8,2, 0);
 ESP32Encoder encoderL, encoderR;
 
-int8_t PIN_ENCODER_L[] = {35,34};
-int8_t PIN_ENCODER_R[] = {12,13};
+int8_t PIN_ENCODER_L[] = {17,16};
+int8_t PIN_ENCODER_R[] = {2,4};
 
 int lspeed, rspeed;
 void cmdCallback(void*cmd) {
@@ -57,7 +57,7 @@ void setup() {
     delay(200);
   }
 
-  if( _logger.begin( host_ip )) {
+  if( _logger.begin(host_ip)) {
     xTaskCreatePinnedToCore(HostTask, "HostTask", 4096, NULL, 3, &th_p[0], 0); 
   }
   else {

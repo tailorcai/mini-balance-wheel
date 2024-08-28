@@ -7,7 +7,8 @@ Flex_Log& _logger = Flex_Log::instance();
 
 #include <ESP32Encoder.h> // https://github.com/madhephaestus/ESP32Encoder.git 
 // #include "mcpwm_motor.h"    // for 9910
-#include <TB6612_ESP32.h> // for 6612
+// #include <TB6612_ESP32.h> // for 6612
+#include "at8236_esp32.h" 
 
 #include "mpu6050_dmp.h"
 #include "common.h"
@@ -19,17 +20,17 @@ Flex_Log& _logger = Flex_Log::instance();
 
 
  // 管脚顺序要匹配PID
-MotorWithAdj motorL(33,25,32,1,5,5000,8,1, .04);
-MotorWithAdj motorR(27,26,14,1,5,5000,8,2, 0);
+MotorWithAdj motorL(19,21,1,5000,8,1, 0);
+MotorWithAdj motorR(23,22,1,5000,8,2, 0);
 ESP32Encoder encoderL, encoderR;
 
 #define LED_PIN       2
-int8_t PIN_ENCODER_L[] = {35,34};
-int8_t PIN_ENCODER_R[] = {12,13};
+int8_t PIN_ENCODER_L[] = {17,16};
+int8_t PIN_ENCODER_R[] = {2,4};
 
 // BEGIN-BUTTON
 #include <OneButton.h>
-#define BUTTON_PIN 4
+#define BUTTON_PIN 35
 
 // 切换运行/暂停模式,或者由于倾斜角度过大，自动进入暂停模式
 OneButton pauseBtn = OneButton(
@@ -49,11 +50,12 @@ void dmpDataReady() {
 }
 
 
-int MotorRun = 1;
+int MotorRun = 0;
 ERROR_TYPES error_mode;
 void on_error(ERROR_TYPES mode) {
   MotorRun = 0;
   error_mode = mode;
+  Serial.println("onerror: " + String(mode));
 }
 
 TaskHandle_t th_p[1];
@@ -121,7 +123,7 @@ uint8_t Turn_Off(float angle)
 }
 
 /**************************************************************************
-函数功能：限制PWM赋值 
+函数功能：限制PWM赋值
 入口参数：无
 返回  值：无
 **************************************************************************/
@@ -157,7 +159,7 @@ ERROR_TYPES balance_main() {
   // Serial.print( Encoder_Value_Left );Serial.print( '\t' );Serial.println( Encoder_Value_Right );
 
   Balance_Pwm =b_pid.vertical(entity_MPU6050.Angle_Balance, entity_MPU6050.Gyro_Balance);                   //===平衡PID控制	
-		  Velocity_Pwm= v_pid.velocity(Encoder_Value_Left,Encoder_Value_Right);                  //===速度环PID控制	 记住，速度反馈是正反馈，就是小车快的时候要慢下来就需要再跑快一点
+		  Velocity_Pwm=0;// v_pid.velocity(Encoder_Value_Left,Encoder_Value_Right);                  //===速度环PID控制	 记住，速度反馈是正反馈，就是小车快的时候要慢下来就需要再跑快一点
       Turn_Pwm    = 0; //turn_pid.turn(Encoder_Value_Left,Encoder_Value_Right, entity_MPU6050.Gyro_Turn);
  	    Moto1_PWM=Balance_Pwm+Velocity_Pwm - Turn_Pwm;                                     //===计算左轮电机最终PWM
  	  	Moto2_PWM=Balance_Pwm+Velocity_Pwm + Turn_Pwm;                                     //===计算右轮电机最终PWM
