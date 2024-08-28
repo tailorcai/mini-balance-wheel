@@ -47,7 +47,8 @@ void loop() {
             entity_MPU6050.get_Angle();
             dt = micros() - dt;
             char buf[200];
-            sprintf(buf, "chs: %4.2f,%4.2f,%d\n",entity_MPU6050.Angle_Balance,entity_MPU6050.Gyro_Balance, dt);
+            //sprintf(buf, "chs: %4.2f,%4.2f,%d\n",entity_MPU6050.Angle_Balance,entity_MPU6050.Gyro_Balance, dt);
+            sprintf(buf, "chs: %d,%d,%d\n",entity_MPU6050.gyro.x,entity_MPU6050.gyro.y,entity_MPU6050.gyro.z);
             _logger.debug(buf);
             // Serial.println( dt);
 //         uint8_t fifoBuffer[64];

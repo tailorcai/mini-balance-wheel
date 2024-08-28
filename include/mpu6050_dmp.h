@@ -32,6 +32,7 @@ public:
   MPU6050 mpu;
   float Angle_Balance,Gyro_Balance;           //平衡倾角 平衡陀螺仪 转向陀螺仪
   float Gyro_Turn;
+  VectorInt16 gyro;
 //END==========MPU6050==================================================    
     MPU6050_Entity():dmpReady(false) {
 
@@ -119,7 +120,7 @@ public:
             // Serial.println(ypr[2] * 180/M_PI);        
 
             Angle_Balance = ypr[1] * 180/M_PI;    
-            VectorInt16 gyro;
+
             mpu.dmpGetGyro(&gyro, fifoBuffer);
             Gyro_Balance = -gyro.y;
             Gyro_Turn = gyro.z;
